@@ -36,7 +36,35 @@ D [cm^2/s] = slope × 1e-4 / dims   dims = 6 (3D) / 4 (xy 2D) / 2 (z 1D)
 - 数密度 [Å⁻³];质量密度 [g/cm³] = u/Å³ × 1.66054(需元素映射)
 - 水层识别:平滑 ρ(z) 后取**显著**局部极小(深度 > 30% 相邻较低峰),过滤噪声纹波;层数 = 极小点个数 + 1
 
-## 5. 平衡判断(log.lammps)
+## 5. 序参量(l2_order)
+
+- q_l = √(4π/(2l+1) · Σ_m |⟨Y_lm(r̂)⟩|²),球谐用 `scipy.special.sph_harm_y(n, m, theta, phi)`(scipy ≥1.15;旧 `sph_harm` 在 1.17 移除)
+- **邻居必须是同元素**(如 O-O),不是全原子——否则水分子的 H 会被当成 O 的第一壳层
+- 最小镜像 PBC(正交盒);第一壳层截止默认 3.5 Å
+- 冰/液水判据参考:fcc q6 = 0.5745(Steinhardt 1983)、理想四面体 q_tet = 1(平面正方形 0.5)、液水 q6 ≈ 0.2-0.4
+- LSI = 最近 4 邻居距离的 rms 偏差;液水 ~0.4-0.7 Å²,冰更窄
+- **帧间行序不稳定**:未 `sort id` 的 dump 帧间原子行序可变,中心原子一律按 LAMMPS id 定位(实测真实轨迹触发过)
+
+## 5b. VACF/VDOS(l3_vacf_vdos)
+
+- **必须 dump 带速度列**(`vx vy vz`),解析层自动读取;缺失时报错并给 LAMMPS dump 命令示例
+- VACF(τ) = ⟨v(t0+τ)·v(t0)⟩/⟨v(0)²⟩,全原子 × 全时间原点平均,归一化 VACF(0)=1
+- VDOS = Re FFT(VACF × Hanning);频率轴 `rfftfreq(n, d_ps)` 单位已是 THz(1/ps = 1 THz);cm⁻¹ = THz × 33.356
+- 参考峰:O-H 伸缩 ~108 THz(3600 cm⁻¹)、平动/摇摆 10-25 THz、氢键带 5-7 THz(依赖势函数,MACE/AIMD 值有偏移)
+
+## 5c. TCF(l3_tcf)
+
+- **驻留时间**:连续 residence TCF(Impey 1983 系综平均)C(t) = ⟨h(t0)h(t0+1)…h(t0+t)⟩/⟨h(t0)⟩;永不离开的分子 C(t) ≡ 1(不是 l2_hbonds 的键寿命衰减语义,两者勿混)
+- **偶极弛豫**:C(t) = ⟨μ̂(t0+t)·μ̂(t0)⟩,τ 单指数 log-linear 拟合
+- 两者都需要水分子识别(molecules.py:O 与最近 2 个 H 在 1.3 Å 内配对)与 unwrapped 坐标
+
+## 5d. 界面分析(l4_interface)
+
+- 偶极取向:cosθ = μ̂·ẑ,直方图 + 均值;界面水物理:cosθ 偏 ±1 表示偶极指向/背向表面,0 平躺
+- 吸附质 2D 密度:x/y PBC wrap 后直方图,按 bin 面积与帧数归一 (Å⁻²)
+- 层性质:与 l2_density 相同的显著极小分层,另加**稀疏层过滤**(n_O < 2% 总量的噪声谷丢弃)
+
+## 6. 平衡判断(log.lammps)
 
 - thermo 块合并:多块(列集不同)按列名交集合并,保第一块列序
 - 漂移判据:`|斜率 × 窗口宽| < drift_tol × 残差σ`;默认 tol=0.5(纯噪声有限样本的斜率散度 ~ σ√(12/N),tol 须 > 该值才不误判)
@@ -54,5 +82,6 @@ D [cm^2/s] = slope × 1e-4 / dims   dims = 6 (3D) / 4 (xy 2D) / 2 (z 1D)
 |---|---|---|
 | MDAnalysis | 2.10.0 | `HydrogenBondAnalysis` 位于 `MDAnalysis.analysis.hydrogenbonds`(旧 `hbonds` 路径 3.0 移除);selection 必须传字符串 |
 | numpy | 2.4.6 | — |
+| scipy | 1.17.1 | `sph_harm_y(n, m, theta, phi)`;旧 `sph_harm` 已移除 |
 | matplotlib | 3.11.1 | Agg 后端强制 |
 | Python | 3.11.15 | uv 托管 |

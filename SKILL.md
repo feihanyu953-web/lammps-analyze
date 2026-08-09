@@ -55,7 +55,11 @@ python <skill-dir>/scripts/bootstrap_env.py
 | RDF g(r) + 配位数 | `l2_rdf_cn.py` |
 | 密度分布 / 界面水层数 | `l2_density.py --layers` |
 | 氢键数目 + 寿命 C(t) | `l2_hbonds.py` |
+| 结构序参量(q4/q6/四面体/LSI,冰水区分) | `l2_order.py --elements O` |
 | MSD + 扩散系数 | 先 `l1_traj_prep`(unwrap)再 `l3_msd.py` |
+| VACF → VDOS 振动谱(需 dump 带 vx vy vz) | `l3_vacf_vdos.py` |
+| 界面水驻留时间 / 偶极弛豫 | `l3_tcf.py --mode both --region layer ...` |
+| 偶极取向 / 吸附质 2D 分布 / 水层性质 | `l4_interface.py --mode all` |
 
 ## 调用模板
 
@@ -84,6 +88,22 @@ $py = "<skill-dir>/.venv/Scripts/python.exe"
 # 6. MSD + 扩散系数(meta.json 自动提供 dt 与元素映射)
 & $py <skill-dir>/scripts/l3_msd.py --dump run2_uw.dump --data data.lammps `
     --elements "O K" --dims all --diffusive-check
+
+# 7. 结构序参量(O 原子,q4/q6/四面体/LSI,冰水区分)
+& $py <skill-dir>/scripts/l2_order.py --dump run2_uw.dump --data data.lammps `
+    --elements O --order all --lsi
+
+# 8. VACF → VDOS(需要 dump 带 vx vy vz 列;参考峰 O-H ~108 THz / 3600 cm-1)
+& $py <skill-dir>/scripts/l3_vacf_vdos.py --dump run2_uw.dump --data data.lammps `
+    --elements "O H"
+
+# 9. 界面水驻留时间 + 偶极弛豫(先定义界面层区域)
+& $py <skill-dir>/scripts/l3_tcf.py --dump run2_uw.dump --data data.lammps `
+    --mode both --region layer --layer top --trunc 3.0
+
+# 10. 界面综合:偶极取向 + K 离子 2D 分布 + 水层性质
+& $py <skill-dir>/scripts/l4_interface.py --dump run2_uw.dump --data data.lammps `
+    --mode all --adsorbate-element K
 ```
 
 单条命令模板可查各脚本 `--help`。通用参数:全部模块支持 `--region box|layer|sphere`(+ 各自参数,见 `region.py --help`)、`--outdir`、`--name`、`--elements-map`。
@@ -117,7 +137,11 @@ $py = "<skill-dir>/.venv/Scripts/python.exe"
 | 密度 mass 模式无元素映射 | 全部质量为 0 → 报错 | 传 --data / --elements-map |
 | 水层误检(噪声纹波) | 层数偏多 | 层检测有显著极小阈值;`--smooth` 调大 |
 | 氢键键表索引 | donor/acceptor 是 0-based index 非 LAMMPS id | 内部已统一;区域过滤按索引 |
-| MDAnalysis 版本 | 旧 hbonds 路径 3.0 移除 | 已用 `hydrogenbonds` 新路径;method_notes 记录实测版 |
+| 帧间行序可变(未 sort id) | 按行号取原子错位 | 序参量/分子识别按 LAMMPS id 定位;建议 dump `sort id` |
+| dump 无速度列 | VDOS 报错 | LAMMPS dump 加 `vx vy vz` 列 |
+| 静态驻留 C(t)≠1 陷阱 | 误以为实现 bug | 键寿命是 (L−t)/L 衰减;residence TCF(Impey)才恒 1 |
+| 邻居搜索含异种原子 | 序参量被 H 污染 | l2_order 只取同元素第一壳层 |
+| MDAnalysis 版本 | 旧 hbonds 路径 3.0 移除;scipy 旧 sph_harm 移除 | 已用 `hydrogenbonds` / `sph_harm_y`;method_notes 记录实测版 |
 
 ## 权限与安全
 

@@ -41,18 +41,36 @@ def local_minima(y: np.ndarray):
     return np.array(out, dtype=int)
 
 
-def significant_minima(y: np.ndarray, frac: float = 0.3):
+def significant_minima(y: np.ndarray, frac: float = 0.3, merge_window: int = 3):
     """Local minima whose depth below the lower neighboring peak exceeds
-    frac * peak -- filters out noise ripples (e.g. Gaussian tails)."""
-    mins = local_minima(y)
+    frac * peak -- filters out noise ripples (e.g. Gaussian tails).
+
+    Plateau valleys (y[i] == y[i-1] == ... == y[i+k]) have no *strict* local
+    minimum, so candidates also include plateau starts; candidates closer than
+    merge_window bins are merged keeping the deepest point.
+    """
+    n = len(y)
+    cands = []
+    for i in range(1, n - 1):
+        if y[i] <= y[i - 1] and y[i] <= y[i + 1] and (y[i] < y[i - 1] or y[i] < y[i + 1]):
+            cands.append(i)
     keep = []
-    for i in mins:
+    for i in cands:
         left_max = y[:i].max() if i > 0 else y[i]
-        right_max = y[i + 1:].max() if i + 1 < len(y) else y[i]
+        right_max = y[i + 1:].max() if i + 1 < n else y[i]
         peak = min(left_max, right_max)
         if peak > 0 and (peak - y[i]) > frac * peak:
             keep.append(i)
-    return np.array(keep, dtype=int)
+    if not keep:
+        return np.array([], dtype=int)
+    merged = [keep[0]]
+    for i in keep[1:]:
+        if i - merged[-1] <= merge_window:
+            if y[i] < y[merged[-1]]:
+                merged[-1] = i
+        else:
+            merged.append(i)
+    return np.array(merged, dtype=int)
 
 
 def main() -> int:

@@ -35,6 +35,7 @@ class Dump:
     atom_ids: np.ndarray       # (nframe, natom) int64 -- stored, NOT assumed contiguous
     types: np.ndarray          # (nframe, natom) int
     coords: np.ndarray         # (nframe, natom, 3) float64
+    velocities: np.ndarray | None  # (nframe, natom, 3) or None if no vx/vy/vz columns
     columns: list[str]         # ITEM: ATOMS column names
     wrapped: bool              # True if x/y/z (PBC-wrapped), False if xu/yu/zu
 
@@ -159,11 +160,17 @@ def parse_dump(path, start: int = 0, stop: int = -1, stride: int = 1,
     coords = np.empty((nframe, natoms, 3), dtype=float)
     atom_ids = np.empty((nframe, natoms), dtype=np.int64)
     types = np.empty((nframe, natoms), dtype=int)
+    vel_cols = [c for c in ("vx", "vy", "vz") if c in col_idx]
+    velocities = None
+    if len(vel_cols) == 3:
+        velocities = np.empty((nframe, natoms, 3), dtype=float)
     for k, i in enumerate(idx):
         a = frames[i]["atoms"]
         atom_ids[k] = a[:, col_idx["id"]].astype(np.int64)
         types[k] = a[:, col_idx["type"]].astype(int)
         coords[k] = a[:, [col_idx[c] for c in coord_cols]]
+        if velocities is not None:
+            velocities[k] = a[:, [col_idx[c] for c in vel_cols]]
 
     diffs = np.diff(timesteps)
     dt_fs = None
@@ -173,7 +180,7 @@ def parse_dump(path, start: int = 0, stop: int = -1, stride: int = 1,
 
     return Dump(timesteps=timesteps, dt_fs=dt_fs, natoms=natoms, box=box,
                 cell=cell, atom_ids=atom_ids, types=types, coords=coords,
-                columns=cols, wrapped=wrapped)
+                velocities=velocities, columns=cols, wrapped=wrapped)
 
 
 def unwrap_ortho(coords: np.ndarray, cell: np.ndarray) -> np.ndarray:

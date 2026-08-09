@@ -47,10 +47,14 @@ python $HOME\.claude\skills\cluster-connect\scripts\cluster.py pull <profile> ru
 & $py $sk/scripts/l1_traj_prep.py --dump dump.lammpstrj --data data.lammps --stride 10 --name run2
 
 # 4. 分析
-& $py $sk/scripts/l2_rdf_cn.py   --dump run2_uw.dump --data data.lammps --pairs "O:O O:H"
-& $py $sk/scripts/l2_density.py  --dump run2_uw.dump --data data.lammps --axis z --layers
-& $py $sk/scripts/l2_hbonds.py   --dump run2_uw.dump --data data.lammps
-& $py $sk/scripts/l3_msd.py      --dump run2_uw.dump --data data.lammps --elements "O K" --diffusive-check
+& $py $sk/scripts/l2_rdf_cn.py    --dump run2_uw.dump --data data.lammps --pairs "O:O O:H"
+& $py $sk/scripts/l2_density.py   --dump run2_uw.dump --data data.lammps --axis z --layers
+& $py $sk/scripts/l2_hbonds.py    --dump run2_uw.dump --data data.lammps
+& $py $sk/scripts/l3_msd.py       --dump run2_uw.dump --data data.lammps --elements "O K" --diffusive-check
+& $py $sk/scripts/l2_order.py     --dump run2_uw.dump --data data.lammps --elements O --lsi
+& $py $sk/scripts/l3_vacf_vdos.py --dump run2_uw.dump --data data.lammps --elements "O H"   # 需 vx vy vz 列
+& $py $sk/scripts/l3_tcf.py       --dump run2_uw.dump --data data.lammps --mode both --region layer --layer top --trunc 3.0
+& $py $sk/scripts/l4_interface.py --dump run2_uw.dump --data data.lammps --mode all --adsorbate-element K
 ```
 
 每个脚本 `--help` 有完整参数说明。
