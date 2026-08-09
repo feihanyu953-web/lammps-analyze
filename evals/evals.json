@@ -1,0 +1,60 @@
+{
+  "skill_name": "lammps-analyze",
+  "evals": [
+    {
+      "id": "env-bootstrap",
+      "prompt": "我第一次用这个 skill,帮我准备环境分析 LAMMPS 轨迹",
+      "expected_output": "运行 bootstrap_env.py;报告 .venv 就绪或已存在(幂等);输出环境路径",
+      "assertions": [
+        "Calls bootstrap_env.py (or explains that .venv/.ready already exists)",
+        "Mentions the .venv/.ready idempotency marker",
+        "Checks whether the environment exists before rebuilding",
+        "Reports the ready state (created date / python version)"
+      ]
+    },
+    {
+      "id": "rdf-cn",
+      "prompt": "run2 目录有 dump.lammpstrj 和 data.lammps(MACE 跑的 300 K 水),帮我算 O-O 的 RDF 和配位数,画图",
+      "expected_output": "l2_rdf_cn.py 运行,输出 O-O_rdf.csv 与 rdf_cn.png,结论含配位数",
+      "assertions": [
+        "Selects scripts/l2_rdf_cn.py",
+        "Passes --pairs O:O (or resolves O through the type map) and --cn-cut 3.5",
+        "Checks the input files exist before running",
+        "Relays the CONCLUSION line with a CN value verbatim"
+      ]
+    },
+    {
+      "id": "msd-diffusion",
+      "prompt": "帮我算水的扩散系数。轨迹是 MACE-MD,每 1000 步 dump 一次,MD 步长 0.5 fs",
+      "expected_output": "先 l1_traj_prep(unwrap)再 l3_msd;dt 从 TIMESTEP 差推算;输出 3D 与 xy 的 D",
+      "assertions": [
+        "Recognizes MSD needs unwrapping first: runs l1_traj_prep before l3_msd (or uses an existing *_uw.dump)",
+        "Derives dt_fs from dump TIMESTEP gaps x 0.5 fs rather than hardcoding a value",
+        "Uses the 20%-90% fit window (or explains its choice)",
+        "Reports D in cm^2/s for both 3d and xy components"
+      ]
+    },
+    {
+      "id": "pull-and-density",
+      "prompt": "把集群 167 上 run2 的 dump.lammpstrj 拉下来,然后做密度分析看水层有几层",
+      "expected_output": "先经 cluster-connect pull,再本地 l2_density --layers;层数来自显著局部极小",
+      "assertions": [
+        "Uses cluster-connect to pull the trajectory (does not analyse remotely)",
+        "Runs l2_density.py locally with --layers",
+        "Reports the number of layers from local-minimum splitting",
+        "Does not execute the analysis on the cluster"
+      ]
+    },
+    {
+      "id": "equilibrium-check",
+      "prompt": "看下 log.lammps,体系平衡了没?温度能量什么水平",
+      "expected_output": "l1_log_parse.py 运行;漂移判据 + 分段均值 ± σ;明确给出平衡/未平衡判定",
+      "assertions": [
+        "Selects scripts/l1_log_parse.py",
+        "Uses block averaging (segmented means with std) and a drift criterion",
+        "Outputs block means with uncertainty",
+        "Does not claim 'equilibrated' when the drift criterion fails"
+      ]
+    }
+  ]
+}
