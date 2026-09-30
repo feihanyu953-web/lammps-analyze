@@ -30,6 +30,19 @@ D [cm^2/s] = slope × 1e-4 / dims   dims = 6 (3D) / 4 (xy 2D) / 2 (z 1D)
 - τ_hb:单指数 log-linear 拟合(掩码 C(t)∈(0.01, 1]);双指数 curve_fit(带 bounds),τ_avg = A 加权
 - 氢键事件表的 donor/acceptor 是 **universe 0-based 索引**(不是 LAMMPS id)
 
+### 3b. unwrap 不一致陷阱(实测,2026-08)
+
+**现象**:dump 的 `xu/yu/zu` 若发生 image-flag 漂移(O 与自己的 H 在裸坐标里错位多个盒长,且漂移随轨迹增长),HBA 的 donor 分配会渐进失效(donor 数从 ~98 降到 ~76),给出**虚假的氢键数随时间下降**(实测:HBA 报 160→100,而 PBC 修正计数恒定 ~162)。下降幅度与漂移程度正相关,restart 链/作业被 kill 续跑是常见来源。
+
+**诊断**(l2_hbonds 已内置自动检查,配对率 <90% 会 WARNING):
+- 每帧 O 在 1.3 Å(最小镜像)内是否有 2 个 H;配对率随时间下降 = 漂移
+- 独立验证:PBC 修正(最小镜像距离+角度)的氢键计数应恒定
+
+**对策**:
+- 用 wrapped dump(`x y z`,mod(xu/yu/zu) 回盒)重跑;MIC 类分析(RDF/序参量/密度/本检查)对镜像免疫,无需重算
+- molecules.py 配对与偶极(l3_tcf/l4_interface)已改为 PBC-aware(传 `box=d.box`),对漂移数据健壮;配对失败的 O(如 OH⁻ 单 H 或损坏分子)逐帧跳过
+- 根因修复:检查 restart 链的 image flags;后续模拟建议 dump 用 `x y z` + `dump_modify sort id`,分析端用 l1_traj_prep 重新 unwrap
+
 ## 4. 密度分布与水层
 
 - 1D 剖面:每帧直方图 + PBC wrapping(mod 盒长)+ 逐帧 bin 体积归一(NPT 安全);不用 MDAnalysis `DensityAnalysis`(3D 网格化,对 1D 剖面过重)

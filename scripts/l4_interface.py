@@ -99,8 +99,9 @@ def main() -> int:
     ap.add_argument("--stride", type=int, default=1, help="frame stride (default 1)")
     ap.add_argument("--mode", choices=["orientation", "sdf", "layer-props", "all"],
                     default="all")
-    ap.add_argument("--adsorbate-element", default="K",
-                    help="element for the 2D density map (sdf mode)")
+    ap.add_argument("--adsorbate-element", default=None,
+                    help="element for the 2D density map (sdf mode); optional, "
+                         "sdf is skipped (with a note) when absent from the map")
     ap.add_argument("--grid", type=int, default=100, help="SDF grid points per axis")
     ap.add_argument("--nbins", type=int, default=90, help="orientation cos(theta) bins")
     ap.add_argument("--elements-map", default=None, help="type->element override")
@@ -130,10 +131,12 @@ def main() -> int:
 
     # ---- orientation ----
     if args.mode in ("orientation", "all"):
-        mols = find_water_molecules(d.types, d.coords, o_types[0], h_types)
-        if mols is None:
+        paired = find_water_molecules(d.types, d.coords, o_types[0], h_types,
+                                      box=d.box, return_frames=True)
+        if paired is None:
             raise SystemExit("ERROR: could not pair water molecules (check O/H types)")
-        mu = water_dipoles(mols, d.coords)
+        mols, frames = paired
+        mu = water_dipoles(mols, d.coords, box=d.box, frames=frames)
         cos = orientation_cos(mu)
         csv = outdir / f"{args.name}_orientation.csv"
         hist, edges = np.histogram(cos, bins=args.nbins, range=(-1, 1))
@@ -158,40 +161,56 @@ def main() -> int:
 
     # ---- sdf ----
     if args.mode in ("sdf", "all"):
-        if not ads_types:
-            raise SystemExit(
-                f"ERROR: adsorbate element '{args.adsorbate_element}' not in type "
-                f"map {elements}; pass --adsorbate-element matching --elements-map")
-        ads_mask = np.isin(d.types[0], ads_types)
+        if not args.adsorbate_element or not ads_types:
+            if args.mode == "sdf":
+                raise SystemExit(
+                    f"ERROR: adsorbate element '{args.adsorbate_element}' not in "
+                    f"type map {elements}; pass --adsorbate-element matching "
+                    f"--elements-map")
+            print(f"==> sdf skipped: no adsorbate element "
+                  f"'{args.adsorbate_element}' in map {elements}")
+            ads_mask = np.zeros(len(d.atom_ids[0]), dtype=bool)
+        else:
+            ads_mask = np.isin(d.types[0], ads_types)
         if not ads_mask.any():
-            raise SystemExit(f"ERROR: no atoms of element '{args.adsorbate_element}'")
-        H, xc, yc = sdf_xy(d.coords[:, ads_mask], d.box[0, :2], args.grid)
-        csv = outdir / f"{args.name}_sdf.csv"
-        with open(csv, "w", encoding="utf-8") as fh:
-            fh.write("x,y,rho\n")
-            for i in range(len(xc)):
-                for j in range(len(yc)):
-                    fh.write(f"{xc[i]:.5f},{yc[j]:.5f},{H[i, j]:.6g}\n")
-        print(f"==> wrote {csv}")
-        apply_style()
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(5.5, 5))
-        im = ax.imshow(H.T, origin="lower", extent=[xc[0], xc[-1], yc[0], yc[-1]],
-                       aspect="equal", cmap="viridis")
-        fig.colorbar(im, ax=ax, label=f"{args.adsorbate_element} density (A^-2)")
-        ax.set_xlabel("x (A)")
-        ax.set_ylabel("y (A)")
-        savefig(fig, outdir / f"{args.name}_sdf.png")
-        conclusions.append(f"{args.adsorbate_element} 2D density: max={H.max():.4g} "
-                           f"A-2, mean={H.mean():.4g} A-2 (grid {args.grid}x{args.grid})")
+            if args.mode == "sdf":
+                raise SystemExit(f"ERROR: no atoms of element '{args.adsorbate_element}'")
+            print(f"==> sdf skipped: no atoms of element "
+                  f"'{args.adsorbate_element}' in the trajectory")
+            ads_mask = None
+        if ads_mask is not None:
+            H, xc, yc = sdf_xy(d.coords[:, ads_mask], d.box[0, :2], args.grid)
+            csv = outdir / f"{args.name}_sdf.csv"
+            with open(csv, "w", encoding="utf-8") as fh:
+                fh.write("x,y,rho\n")
+                for i in range(len(xc)):
+                    for j in range(len(yc)):
+                        fh.write(f"{xc[i]:.5f},{yc[j]:.5f},{H[i, j]:.6g}\n")
+            print(f"==> wrote {csv}")
+            apply_style()
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(5.5, 5))
+            im = ax.imshow(H.T, origin="lower",
+                           extent=[xc[0], xc[-1], yc[0], yc[-1]],
+                           aspect="equal", cmap="viridis")
+            fig.colorbar(im, ax=ax,
+                         label=f"{args.adsorbate_element} density (A^-2)")
+            ax.set_xlabel("x (A)")
+            ax.set_ylabel("y (A)")
+            savefig(fig, outdir / f"{args.name}_sdf.png")
+            conclusions.append(
+                f"{args.adsorbate_element} 2D density: max={H.max():.4g} "
+                f"A-2, mean={H.mean():.4g} A-2 (grid {args.grid}x{args.grid})")
 
     # ---- layer-props ----
     if args.mode in ("layer-props", "all"):
-        mols = find_water_molecules(d.types, d.coords, o_types[0], h_types)
-        if mols is None:
+        paired = find_water_molecules(d.types, d.coords, o_types[0], h_types,
+                                      box=d.box, return_frames=True)
+        if paired is None:
             raise SystemExit("ERROR: could not pair water molecules (check O/H types)")
-        o_pos = water_o_positions(mols, d.coords)
-        layers = layer_props(o_pos, d.box[0])
+        mols, frames = paired
+        o_pos = water_o_positions(mols, d.coords, frames=frames)
+        layers = layer_props(o_pos, d.box[frames[0]])
         csv = outdir / f"{args.name}_layers_props.csv"
         with open(csv, "w", encoding="utf-8") as fh:
             fh.write("layer,zmin,zmax,thickness,n_O,mean_rho\n")

@@ -25,15 +25,28 @@ def _two_water_frame():
 
 def test_pairing_finds_two_waters():
     types, coords = _two_water_frame()
-    mols = find_water_molecules(types, coords, o_type=2, h_types=[1])
-    assert mols is not None
+    paired = find_water_molecules(types, coords, o_type=2, h_types=[1],
+                                  return_frames=True)
+    assert paired is not None
+    mols, frames = paired
     assert mols.shape == (1, 2, 3)
+    assert frames.tolist() == [0]
     # O indices sorted: molecule 0 = O idx 0, molecule 1 = O idx 3
     assert mols[0, 0, 0] == 0
     assert mols[0, 1, 0] == 3
     # H indices: O0 pairs with H1,H2; O3 with H4,H5
     assert sorted(mols[0, 0, 1:].tolist()) == [1, 2]
     assert sorted(mols[0, 1, 1:].tolist()) == [4, 5]
+
+
+def test_pairing_legacy_single_array_return():
+    """Backward compatibility: without return_frames the function returns the
+    bare (nframe, n_mol, 3) array, as before the frames-refactor."""
+    types, coords = _two_water_frame()
+    mols = find_water_molecules(types, coords, o_type=2, h_types=[1])
+    assert mols is not None
+    assert mols.shape == (1, 2, 3)
+    assert mols[0, 0, 0] == 0
 
 
 def test_pairing_fails_without_h():
@@ -51,8 +64,11 @@ def test_pairing_fails_no_o():
 
 def test_dipole_direction():
     types, coords = _two_water_frame()
-    mols = find_water_molecules(types, coords, o_type=2, h_types=[1])
-    mu = water_dipoles(mols, coords)
+    paired = find_water_molecules(types, coords, o_type=2, h_types=[1],
+                                  return_frames=True)
+    assert paired is not None
+    mols, frames = paired
+    mu = water_dipoles(mols, coords, frames=frames)
     # molecule 0: (H1-O)+(H2-O) = (0.96,0,0)+(-0.24,0.93,0) = (0.72, 0.93, 0)
     assert np.allclose(mu[0, 0], [0.72, 0.93, 0.0])
     # molecule 1: (H4-O2)+(H5-O2) = (0.96,0,0)+(-0.24,0.93,0) = same vector

@@ -140,6 +140,7 @@ $py = "<skill-dir>/.venv/Scripts/python.exe"
 | 帧间行序可变(未 sort id) | 按行号取原子错位 | 序参量/分子识别按 LAMMPS id 定位;建议 dump `sort id` |
 | dump 无速度列 | VDOS 报错 | LAMMPS dump 加 `vx vy vz` 列 |
 | 静态驻留 C(t)≠1 陷阱 | 误以为实现 bug | 键寿命是 (L−t)/L 衰减;residence TCF(Impey)才恒 1 |
+| xu/yu/zu image 漂移 | HBA 氢键数伪下降(实测 160→100,真实恒定) | l2_hbonds 自动配对检查会 WARNING;用 wrapped dump(mod 回盒)重跑;MIC 类分析不受影响;详见 method_notes §3b |
 | 邻居搜索含异种原子 | 序参量被 H 污染 | l2_order 只取同元素第一壳层 |
 | MDAnalysis 版本 | 旧 hbonds 路径 3.0 移除;scipy 旧 sph_harm 移除 | 已用 `hydrogenbonds` / `sph_harm_y`;method_notes 记录实测版 |
 

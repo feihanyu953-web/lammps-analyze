@@ -119,11 +119,14 @@ def main() -> int:
             f"ERROR: need O and H types in the map (got {elements}); "
             "pass --data or --elements-map '1:O 2:H'")
 
-    mols = find_water_molecules(d.types, d.coords, o_types[0], h_types)
-    if mols is None:
+    paired = find_water_molecules(d.types, d.coords, o_types[0], h_types,
+                                  box=d.box, return_frames=True)
+    if paired is None:
         raise SystemExit("ERROR: could not pair O-H into water molecules "
                          "(check O/H types and that the dump has unwrapped coords)")
-    print(f"    {mols.shape[1]} water molecules x {mols.shape[0]} frames")
+    mols, frames = paired
+    print(f"    {mols.shape[1]} water molecules x {mols.shape[0]} frames "
+          f"(kept {len(frames)}/{len(d.timesteps)} frames; outliers dropped)")
 
     dt_ps = (d.dt_fs if d.dt_fs is not None else args.timestep_fs) / 1000.0
     t_ps = np.arange(len(d.timesteps)) * dt_ps
@@ -134,42 +137,43 @@ def main() -> int:
             raise SystemExit(
                 "ERROR: residence mode needs a region (e.g. --region layer "
                 "--layer top --trunc 3.0, or --zmin/--zmax) to define the layer")
-        o_pos = water_o_positions(mols, d.coords)
+        o_pos = water_o_positions(mols, d.coords, frames=frames)
         args_box = None  # select_frame builds its own per call
         # region mask per molecule from its O position (static: frame 0 mask)
         # NB: for residence we evaluate the same geometric layer every frame
         nframe = o_pos.shape[0]
         in_region = np.zeros((nframe, mols.shape[1]), dtype=bool)
-        # build a per-frame region decision using select_frame semantics
-        for f in range(nframe):
+        # build a per-frame region decision using select_frame semantics;
+        # dropped outlier frames simply continue the previous row's state
+        for k, f in enumerate(frames):
             box = d.box[f]
             args_box = np.array([[box[0, 0], box[0, 1]], [box[1, 0], box[1, 1]],
                                  [box[2, 0], box[2, 1]]])
             if args.region == "layer" and args.layer_auto:
                 raise SystemExit("residence + --layer-auto not supported; "
                                  "use --layer top|bottom + --trunc or --zmin/--zmax")
-            m = select_frame(o_pos[f], args_box, args)
-            in_region[f] = m
+            m = select_frame(o_pos[k], args_box, args)
+            in_region[k] = m
         ct, n_ever = residence_tcf(in_region)
-        fit = fit_tau(t_ps, ct)
+        fit = fit_tau(t_ps[frames], ct)
         results["residence"] = (ct, fit, n_ever)
 
     if args.mode in ("dipole", "both"):
-        mu = water_dipoles(mols, d.coords)
+        mu = water_dipoles(mols, d.coords, box=d.box, frames=frames)
         ct = dipole_tcf(mu)
-        fit = fit_tau(t_ps, ct)
+        fit = fit_tau(t_ps[frames], ct)
         results["dipole"] = (ct, fit, mols.shape[1])
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
+    t_sel = t_ps[frames]  # time axis for the kept (outlier-free) frames
     csv_path = outdir / f"{args.name}_tcf.csv"
     with open(csv_path, "w", encoding="utf-8") as fh:
         cols = list(results)
         fh.write("t_ps," + ",".join(cols) + "\n")
-        n = len(t_ps)
-        for i in range(n):
-            fh.write(f"{t_ps[i]:.6g}," + ",".join(
+        for i in range(len(t_sel)):
+            fh.write(f"{t_sel[i]:.6g}," + ",".join(
                 f"{results[k][0][i]:.6g}" for k in cols) + "\n")
     print(f"==> wrote {csv_path}")
 
@@ -178,7 +182,7 @@ def main() -> int:
     fig, ax = plt.subplots(figsize=(6.5, 4))
     for k in results:
         ct, fit, n_ = results[k]
-        ax.plot(t_ps, ct, lw=1.2, label=k)
+        ax.plot(t_sel, ct, lw=1.2, label=k)
         if fit.get("tau"):
             ax.axvline(fit["tau"], lw=0.8, ls="--",
                        label=f"tau({k})={fit['tau']:.2f} ps")
