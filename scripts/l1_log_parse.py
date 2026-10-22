@@ -174,7 +174,7 @@ def main() -> int:
     with open(eq_path, "w", encoding="utf-8") as fh:
         fh.write("block,step_start,step_end," + ",".join(f"{k}_mean,{k}_std" for k in keys) + "\n")
         for i in range(args.nblocks):
-            row = [str(i), blocks["Step"][i][2], blocks["Step"][i][3]]
+            row = [str(i), str(blocks["Step"][i][2]), str(blocks["Step"][i][3])]
             for k in keys:
                 mean, std, _, _ = blocks[k][i]
                 row.append(f"{mean:.8g}")
