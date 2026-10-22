@@ -45,6 +45,14 @@ python <skill-dir>/scripts/bootstrap_env.py
    python <cc-dir>/scripts/cluster.py pull <profile> run2/data.lammps ./
    ```
 3. 缺 data.lammps 时用 `--elements-map "1:O 2:H ..."` 兜底(元素名→type 号需从 LAMMPS input 的 `create_atoms`/`set type` 或 `group` 定义确认)
+4. **VASP AIMD 数据**先转换为 lammpstrj 再进管线:
+   ```powershell
+   # 首选: vasprun.xml(流式解析;速度有无随 VASP 版本/设置而定,转换器自动检测并在 CONCLUSION 报告)
+   python <skill-dir>/scripts/aimd_to_dump.py --vasprun vasprun.xml --out traj.lammpstrj --timestep-fs <POTIM>
+   # 备选: XDATCAR(仅位置,无速度);dt=POTIM*NBLOCK
+   python <skill-dir>/scripts/aimd_to_dump.py --xdatcar XDATCAR --out traj.lammpstrj --timestep-fs <POTIM*NBLOCK>
+   ```
+   转换器流式解析(GB 级文件安全)、元素→type 自动映射并写 `<out>.elements_map`、正交晶胞检查(三斜响亮拒绝,见已知坑)、输出仅一行首注释(MDAnalysis 只容一行)。注意: vasprun 位置是**连续坐标**,XDATCAR 是**包裹坐标**(同一 MD 两格式 MIC 折算后 <1e-6 Å 一致);vasprun 速度单位文件内无声明,有速度时按 TEBEG 动力学温度自洽校准(m/s vs Å/fs 二选一)并在 CONCLUSION 报告口径,无 TEBEG 回退 m/s 并 WARNING 未验证。
 
 ## 第一步:选择分析路径
 
@@ -55,6 +63,7 @@ python <skill-dir>/scripts/bootstrap_env.py
 | RDF g(r) + 配位数 | `l2_rdf_cn.py` |
 | 密度分布 / 界面水层数 | `l2_density.py --layers` |
 | 氢键数目 + 寿命 C(t) | `l2_hbonds.py` |
+| 离子溶剂化层氢键(壳层随离子移动,shell vs bulk) | `l2_hbond_shell.py --shell-around K --shell-rcut <RDF第一极小>` |
 | 结构序参量(q4/q6/四面体/LSI,冰水区分) | `l2_order.py --elements O` |
 | MSD + 扩散系数 | 先 `l1_traj_prep`(unwrap)再 `l3_msd.py` |
 | VACF → VDOS 振动谱(需 dump 带 vx vy vz) | `l3_vacf_vdos.py` |
@@ -145,6 +154,7 @@ $py = "<skill-dir>/.venv/Scripts/python.exe"
 | MDAnalysis 版本 | 旧 hbonds 路径 3.0 移除;scipy 旧 sph_harm 移除 | 已用 `hydrogenbonds` / `sph_harm_y`;method_notes 记录实测版 |
 | dump 时间戳是累计步数 | 自研脚本拿 `dmp.timesteps` 乘 dt 当产跑时间 → 轴含平衡段(实测 2 ns 产跑画出 200–2200 ps) | 用 `dmp.timesteps_rel`(或减首帧);内建模块不受影响(l3_msd 按帧序,l2_hbonds 按帧号) |
 | 滑动平均零填充边缘 | `np.convolve(...,'same')` 两端除数不变分子缺块 → 平稳时间序列两端假升假降 | 用 `plot_utils.smooth`(已改边缘缩窗),勿自写 convolve |
+| 单离子 RDF "第一峰"标签 | 体系只有 1 个该离子时第一壳层峰低矮锯齿,检测器按显著度报更高的第二壳层峰(实测 model4 K-O 报 4.47 Å 而真第一壳层在 ~2.5 Å) | 读 CN(r) 而非峰标签;单离子体系配合原始距离直方图核对 |
 
 ## 权限与安全
 
