@@ -138,3 +138,35 @@ def test_elements_map_from_data(mini_data_path):
 def test_elements_map_priority(mini_data_path):
     m = read_types_elements(data_path=str(mini_data_path), elements_map="1:Na 2:Cl")
     assert m == {1: "Na", 2: "Cl"}
+
+
+def test_timesteps_rel_anchors_first_frame(tmp_path):
+    # dump timestamps are cumulative LAMMPS step counters: a production-only dump
+    # still carries the pre-production step count; timesteps_rel must anchor t=0
+    # at the first frame (found on the lammps2 KCl analysis, 2026-10-22)
+    frames = []
+    for step in (100707, 101207, 101707):
+        frames.append(f"""ITEM: TIMESTEP
+{step}
+ITEM: NUMBER OF ATOMS
+2
+ITEM: BOX BOUNDS pp pp pp
+0 20
+0 20
+0 20
+ITEM: ATOMS id type x y z
+1 1 1.0 2.0 3.0
+2 2 4.0 5.0 6.0
+""")
+    p = tmp_path / "offset.dump"
+    p.write_text("".join(frames))
+    d = parse_dump(p, timestep_fs=2.0)
+    assert d.timesteps.tolist() == [100707, 101207, 101707]
+    assert d.timesteps_rel.tolist() == [0, 500, 1000]
+    assert d.dt_fs == pytest.approx(1000.0)
+
+
+def test_timesteps_rel_mini_fixture(mini_dump_path):
+    d = parse_dump(mini_dump_path, start=1, stop=5, stride=2)
+    # relative time follows the SLICED selection: anchored at its own first frame
+    assert d.timesteps_rel.tolist() == [0, 200]

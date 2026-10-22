@@ -143,6 +143,8 @@ $py = "<skill-dir>/.venv/Scripts/python.exe"
 | xu/yu/zu image 漂移 | HBA 氢键数伪下降(实测 160→100,真实恒定) | l2_hbonds 自动配对检查会 WARNING;用 wrapped dump(mod 回盒)重跑;MIC 类分析不受影响;详见 method_notes §3b |
 | 邻居搜索含异种原子 | 序参量被 H 污染 | l2_order 只取同元素第一壳层 |
 | MDAnalysis 版本 | 旧 hbonds 路径 3.0 移除;scipy 旧 sph_harm 移除 | 已用 `hydrogenbonds` / `sph_harm_y`;method_notes 记录实测版 |
+| dump 时间戳是累计步数 | 自研脚本拿 `dmp.timesteps` 乘 dt 当产跑时间 → 轴含平衡段(实测 2 ns 产跑画出 200–2200 ps) | 用 `dmp.timesteps_rel`(或减首帧);内建模块不受影响(l3_msd 按帧序,l2_hbonds 按帧号) |
+| 滑动平均零填充边缘 | `np.convolve(...,'same')` 两端除数不变分子缺块 → 平稳时间序列两端假升假降 | 用 `plot_utils.smooth`(已改边缘缩窗),勿自写 convolve |
 
 ## 权限与安全
 

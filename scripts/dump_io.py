@@ -39,6 +39,18 @@ class Dump:
     columns: list[str]         # ITEM: ATOMS column names
     wrapped: bool              # True if x/y/z (PBC-wrapped), False if xu/yu/zu
 
+    @property
+    def timesteps_rel(self) -> np.ndarray:
+        """Timesteps anchored at the first frame (t[0] = 0).
+
+        Raw `timesteps` are cumulative LAMMPS step counters: a dump written only
+        during production still carries every pre-production step (minimize +
+        equilibration), so `timesteps * timestep_fs` is time-since-simulation-start,
+        NOT time-since-production-start (observed as a 200-2200 ps axis on a
+        2 ns production). Anchor x axes on this property.
+        """
+        return self.timesteps - self.timesteps[0]
+
 
 class _Pushback:
     """Tiny pushback iterator so a peeked line can be returned to the stream."""
@@ -69,6 +81,10 @@ def parse_dump(path, start: int = 0, stop: int = -1, stride: int = 1,
     ids are stored as data (they may be non-contiguous). start/stop/stride are
     applied while reading (streaming). Triclinic cells (4-row BOX BOUNDS)
     raise ValueError: not supported in this MVP.
+
+    Note: `timesteps` are cumulative LAMMPS step counters (they include any
+    pre-dump minimize/equilibration stages); use `Dump.timesteps_rel` for
+    production-relative time axes.
     """
     path = Path(path)
     frames: list[dict] = []
